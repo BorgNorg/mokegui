@@ -10,7 +10,8 @@ from IPython.display import clear_output
 from IPython.display import display
 from sklearn.linear_model import LinearRegression
 import threading
-
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class MOKEGUI:
 
@@ -21,9 +22,9 @@ class MOKEGUI:
         self.calibration = None
         self.directory = None
         self.running = False  # Flag to control the running state of the MOKE code
-
+        
         self.app = ctk.CTk()
-        self.app.geometry("750x475")
+        self.app.geometry("870x535")
         self.app.title("MOKE")
 
         frame = ctk.CTkFrame(master=self.app)
@@ -55,6 +56,13 @@ class MOKEGUI:
 
         self.label_step = ctk.CTkLabel(master=frame, text="Step Voltage (V)")
         self.label_step.grid(row=2, column=0, padx=10, pady=5)
+        
+        self.figure, self.ax = plt.subplots(figsize=(6,4))
+        self.ax.set_xlabel("Field(T)")
+        self.ax.set_ylabel("Moke Signal")
+        self.ax.set_title(self.sample_name.get("1.0", "end-1c"))
+        self.plot_canvas = FigureCanvasTkAgg(self.figure, master=self.app)
+        self.plot_canvas.get_tk_widget().place(relx=0.5, rely=0.4, anchor=ctk.CENTER, relwidth=0.5, relheight=0.5)
 
         self.app.mainloop()
         
@@ -180,46 +188,27 @@ class MOKEGUI:
                                      ignore_index=True)  #Resets indexing so rows appear in the order appended/added.
 
             #Plot current data
-            plt.show(
-                block=False)  #If running in terminal, block = False will let the code keep running w/o closing the graph window
-            plt.xlabel('Field (T)')
-            plt.ylabel('Moke signal')
-            plt.title(sample_name)
-            plt.plot(results['Field (T)'],
-                     results['MOKE Signal'], '-b',
-                     label='MOKE Signal')  #Setup what data is to be plotted. If you want lines instead of scatter omit 'o'.
-            plt.grid('on')
-            plt.tight_layout()
-            clear_output(
-                wait=True)  #Clears any previous plot so that the data plotted is updated every loop and not appended to previous
-
-            display(plt.gcf())
+            self.ax.cla()
+            self.ax.plot(results["Field (T)"], results["MOKE Signal"], "-b", label="Moke Signal")
+            self.ax.set_xlabel("Field(T)")
+            self.ax.set_ylabel("Moke Signal")
+            self.ax.set_title(sample_name)
+            self.ax.grid("on")
+            self.plot_canvas.draw()
+            
             time.sleep(1.0)
 
         lia.write('AUXV 1 ,%.2f' % 0.0)
 
         file_date_today = file_date()
-        results.to_csv(str(save_dir) + '/' + str(sample_name) + '_' + str(file_date_today) + '_results.csv', index=False)
+        results.to_csv(str(save_dir) + '/' + str(sample_name) + '_' + str(file_date_today) + '_results.csv', index=False)        
+
+            
+            
         print("results saved to %s" % save_dir)
         print('Program Completed')
         self.running = False
-        self.start_button.configure(text="Start")
-
-
-
-
-Traceback (most recent call last):
-  File "C:\Users\ayomipo\AppData\Local\anaconda3\Lib\threading.py", line 1038, in _bootstrap_inner
-    self.run()
-  File "C:\Users\ayomipo\AppData\Local\anaconda3\Lib\threading.py", line 975, in run
-    self._target(*self._args, **self._kwargs)
-  File "c:\users\ayomipo\downloads\moke_withoutpi_v03(edit) (1) - copy.py", line 191, in moke_code
-    self.ax.plot(results["Field(T)"], results["MOKE Signal"], "-b", label="Moke Signal")
-                 ~~~~~~~^^^^^^^^^^^^
-  File "C:\Users\ayomipo\AppData\Local\anaconda3\Lib\site-packages\pandas\core\frame.py", line 3807, in __getitem__
-    indexer = self.columns.get_loc(key)
-              ^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\ayomipo\AppData\Local\anaconda3\Lib\site-packages\pandas\core\indexes\base.py", line 3804, in get_loc
-    raise KeyError(key) from err
-KeyError: 'Field(T)'
-0.6545493061784818
+        self.start_button.configure(text="Start")      
+        
+        
+MOKEGUI()
