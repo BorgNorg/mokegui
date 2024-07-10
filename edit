@@ -204,3 +204,22 @@ class MOKEGUI:
         print('Program Completed')
         self.running = False
         self.start_button.configure(text="Start")
+
+
+
+
+Traceback (most recent call last):
+  File "C:\Users\ayomipo\AppData\Local\anaconda3\Lib\threading.py", line 1038, in _bootstrap_inner
+    self.run()
+  File "C:\Users\ayomipo\AppData\Local\anaconda3\Lib\threading.py", line 975, in run
+    self._target(*self._args, **self._kwargs)
+  File "c:\users\ayomipo\downloads\moke_withoutpi_v03(edit) (1) - copy.py", line 191, in moke_code
+    self.ax.plot(results["Field(T)"], results["MOKE Signal"], "-b", label="Moke Signal")
+                 ~~~~~~~^^^^^^^^^^^^
+  File "C:\Users\ayomipo\AppData\Local\anaconda3\Lib\site-packages\pandas\core\frame.py", line 3807, in __getitem__
+    indexer = self.columns.get_loc(key)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ayomipo\AppData\Local\anaconda3\Lib\site-packages\pandas\core\indexes\base.py", line 3804, in get_loc
+    raise KeyError(key) from err
+KeyError: 'Field(T)'
+0.6545493061784818
