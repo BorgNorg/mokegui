@@ -203,6 +203,65 @@ class MOKEGUI:
         file_date_today = file_date()
         results.to_csv(str(save_dir) + '/' + str(sample_name) + '_' + str(file_date_today) + '_results.csv', index=False)        
 
+        #Six repetitions
+        #start of MOKE data collection
+        #########################################################################################################################
+        for n in np.arange(0.0, 6.0):
+            if not self.running:
+                break
+            results = pd.DataFrame()  #creates empty data frame to save data to
+            temps = pd.DataFrame()
+            lia.write('AUXV 1, 9.0')
+            time.sleep(5.0)
+            lia.write('APHS')
+            #time.sleep(3)
+            lia.write('AUXV 1, 9.0')  #saturate the magnet
+            time.sleep(1)
+            for load in loadtotal:
+                lia.write('AUXV 1 ,%.2f' % load)
+                Hall_voltage = dmm_01.query(":MEAS:VOLT?")
+                time.sleep(0.1)
+
+                lia.write('STRT')  #this starts the data collection for the LIA
+                FMR_string = lia.query(
+                    'SNAP? 1,2')  #this collects the data from X and Y from the LIA and returns it as a string
+                #X = FMR signal, Y = background
+                FMR_data = FMR_string.split(',')  #this splits the string up accordingly to get the values into an array
+                Hall_voltage = dmm_01.query(":MEAS:VOLT?")
+                Field_value = (slope * float(Hall_voltage.split(',')[0]) + intercept)
+
+                temp = {"Voltage (V)": load,
+                        "MOKE Signal": float(FMR_data[0]),
+                        'MOKE BCKGD': float(FMR_data[1]),
+                        'Hall Voltage(V)': float(Hall_voltage.split(',')[0]),
+                        'Field (T)': Field_value}  #Creating a temporary array to store all of our values to before appending to dataframe.
+                results = results.append(temp,
+                                          #We build the results dataframe row by row by adding the temp array for every for loop/voltage
+                                          ignore_index=True)  #Resets indexing so rows appear in the order appended/added.
+
+                #pd_append = {"Voltage": load,
+                #            "X": float(mylist[0]),
+                #             "Y": float(mylist[1])}
+                # temps = temps.append(pd_append, ignore_index=True)
+
+                # temp['X']=float(mylist[0])#this makes the X col of data in the data structure from the array mylist
+                #temp['Y']=float(mylist[1])#this makes the Y col of the data in the data strucutre from the array mylist
+                #results=results.append(temp,ignore_index=True)
+
+                #Plot current data
+                self.ax.plot(results["Field (T)"], results["MOKE Signal"], "-b", label="Moke Signal")
+                self.ax.set_xlabel("Field(T)")
+                self.ax.set_ylabel("Moke Signal")
+                self.ax.set_title(sample_name)
+                self.ax.grid("on")
+                self.plot_canvas.draw()
+                
+                time.sleep(1.0)
+
+            clear_output(wait=True)
+            plt.savefig(save_dir + sample_name + str(
+                file_date()) + '.png')  #Export FMR graph    ##NEED TO ADD SAMPLE TITLE AS USER INPUT
+            lia.write('AUXV 1, 0')  #sets field to zero
             
             
         print("results saved to %s" % save_dir)
