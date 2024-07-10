@@ -1,0 +1,186 @@
+import customtkinter as ctk
+from tkinter import filedialog
+import pyvisa as visa
+import numpy as np
+import pandas as pd
+import os
+import time
+import matplotlib.pyplot as plt
+from IPython.display import clear_output
+from IPython.display import display
+from sklearn.linear_model import LinearRegression
+import threading  # Add threading
+
+class MOKEGUI:
+
+    def __init__(self):
+        ctk.set_appearance_mode("system")
+        ctk.set_default_color_theme("blue")
+        
+
+        self.app = ctk.CTk()
+        self.app.geometry("750x475")
+        self.app.title("MOKE")
+
+        frame = ctk.CTkFrame(master=self.app)
+        frame.grid(row=0, column=0, sticky="nsew")
+
+        self.start_button = ctk.CTkButton(master=self.app, text="Start", command=self.toggle)
+        self.start_button.place(relx=0.75, rely=0.85, anchor=ctk.CENTER, relwidth=0.2, relheight=0.1)
+
+        self.directory_button = ctk.CTkButton(master=self.app, text="Save Directory", command=self.save_directory)
+        self.directory_button.place(relx=0.50, rely=0.85, anchor=ctk.CENTER, relwidth=0.2, relheight=0.1)
+
+        self.calibration_button = ctk.CTkButton(master=self.app, text="Calibration File", command=self.calibration_file)
+        self.calibration_button.place(relx=0.25, rely=0.85, anchor=ctk.CENTER, relwidth=0.2, relheight=0.1)
+
+        self.sample_name = ctk.CTkTextbox(master=frame, height=20, width=80)
+        self.sample_name.grid(row=0, column=1)
+
+        self.maxV = ctk.CTkTextbox(master=frame, height=20, width=80)
+        self.maxV.grid(row=1, column=1, padx=10, pady=5)
+
+        self.stepV = ctk.CTkTextbox(master=frame, height=20, width=80)
+        self.stepV.grid(row=2, column=1, padx=10, pady=5)
+
+        self.label_sample = ctk.CTkLabel(master=frame, text="Sample Name")
+        self.label_sample.grid(row=0, column=0, padx=10, pady=5)
+
+        self.label_max = ctk.CTkLabel(master=frame, text="Max Voltage (V)")
+        self.label_max.grid(row=1, column=0, padx=10, pady=5)
+
+        self.label_step = ctk.CTkLabel(master=frame, text="Step Voltage (V)")
+        self.label_step.grid(row=2, column=0, padx=10, pady=5)
+
+        self.stop_event = threading.Event()  # Initialize the stop event
+        self.thread = None  # Initialize the thread
+
+        self.app.mainloop()
+        
+        
+    def save_directory(self):
+        directory = filedialog.askdirectory()
+        if directory:
+            print(f"Selected Directory: {directory}")
+            self.directory_button.configure(text=directory)
+            self.directory = directory
+
+    def calibration_file(self):
+        calibration = filedialog.askopenfilename()
+        if calibration:
+            print(f"Selected Calibration File: {calibration}")
+            self.calibration_button.configure(text=calibration)
+            self.calibration = calibration
+
+
+    def toggle(self):
+        current = self.start_button.cget("text")
+        if current == "Start":
+            self.start_button.configure(text="Stop")
+            self.stop_event.clear()  # Clear the stop event
+            self.thread = threading.Thread(target=self.moke_code)  # Create a new thread to run moke_code
+            self.thread.start()  # Start the thread
+        else:
+            self.start_button.configure(text="Start")
+            self.stop_event.set()  # Set the stop event to signal the thread to stop
+
+    def moke_code(self):
+        rm = visa.ResourceManager()  #calls the differnt addresses for what is attached to the system
+        sm = rm.open_resource('GPIB0::24::INSTR')  #adress and connection for the source meter
+        # rm.list_resources()
+        lia = rm.open_resource('GPIB0::13::INSTR')  #adress abd connection for the lock in amplifier
+
+        dmm_01 = rm.open_resource('GPIB0::22::INSTR')
+        smu = rm.open_resource('GPIB0::24::INSTR')  #adress and connection for the source meter
+
+
+        def init_smu():
+            smu.write('*RST')
+            smu.write(':SOUR:FUNC CURR')
+            smu.write(':SOUR:CURR:MODE FIXED')
+            smu.write(':SOUR:CURR:RANG 0.002')
+            smu.write(':SOUR:CURR:LEV 0.001')
+            smu.write(':SENS:VOLT:PROT 5')
+            smu.write(':SENS:FUNC "VOLT"')
+            smu.write(':SENS:VOLT:RANG 2')
+            smu.write(':FORM:ELEM VOLT')
+            smu.write(':OUTP ON'
+
+
+        init_smu()
+
+        # print(float(dmm_01.query(":MEAS:VOLT?").split(',')[0]))
+
+        #This is where we want to save our data and graphs to. 
+        #save_dir = os.path.join('C:/Users/ramosaponte/Box/Arena_Lab_Data/Leo/MOKE') #File path to save FMR data to.20210816A_Fe90Co10
+        save_dir = self.directory
+        sample_name = self.sample_name.get()
+
+        calibrationfile = self.calibration
+
+        #Generate fit equation for the calibration data
+        model = LinearRegression()  #create a model
+        calib_data = pd.read_csv(calibrationfile)
+
+        HV = np.array(calib_data['Hall Voltage(V)'])
+        Field = np.array(calib_data['Field (T)'])
+
+        X = HV.reshape(-1, 1)
+
+        model.fit(X, Field)
+        slope = model.coef_[0]
+        intercept = model.intercept_
+
+        print('Calibration Fit, Field (T) = ', slope, '* Hall_voltage +', intercept)
+
+        # results =pd.DataFrame()
+
+        #this is the voltage output given to the BOP to convert into a current to give to the magnet 
+        #negative voltage is positive current
+
+        maxvolt = self.maxV.get()
+        voltstep = self.stepV.get()
+
+        loads = np.arange(0.0, maxvolt, voltstep)
+        loads2 = np.arange(-1 * maxvolt, maxvolt, voltstep)
+        loads3 = np.arange(maxvolt, -1 * maxvolt, -1 * voltstep)
+
+        # print (loads)
+        # print(loads2)
+        # print(loads3)
+
+        #combines the two data sets to create a full hystersis loop
+
+        loadtotal = np.concatenate([loads3, loads2])
+
+
+        def file_date():
+            import datetime
+            date_today_0 = datetime.datetime.today()
+            date_today_1 = str(date_today_0).replace("-", "_").replace(" ", "_time_")
+            date_today_2 = str(date_today_1).split('.')[0].replace(":", "_")
+            return date_today_2
+
+
+        #start of MOKE data collection
+        #########################################################################################################################
+        results = pd.DataFrame()  #creates empty data frame to save data to
+        temps = pd.DataFrame()
+        lia.write('AUXV 1, 10.0')
+        time.sleep(5.0)
+        lia.write('APHS')
+        #time.sleep(3)
+        lia.write('AUXV 1, 10.0')  #saturate the magnet
+        time.sleep(1)
+        for load in loadtotal:
+            if self.stop_event.is_set():  # Check if the stop event is set
+                break
+            lia.write('AUXV 1 ,%.2f' % load)
+            Hall_voltage = dmm_01.query(":MEAS:VOLT?")
+            time.sleep(0.1)
+
+            lia.write('STRT')  #this starts the data collection for the LIA
+            FMR_string = lia.query('SNAP? 1,2')  #this collects the data from X and Y from the LIA and returns it as a string
+            #X = FMR signal, Y = background
+            FMR_data = FMR_string.split(',')  #this splits the string up accordingly to get the values into an array
+            Hall_voltage = dmm_01.query(":MEAS
