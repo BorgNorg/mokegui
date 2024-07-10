@@ -9,7 +9,8 @@ import matplotlib.pyplot as plt
 from IPython.display import clear_output
 from IPython.display import display
 from sklearn.linear_model import LinearRegression
-import threading  # Add threading
+import threading
+
 
 class MOKEGUI:
 
@@ -17,6 +18,9 @@ class MOKEGUI:
         ctk.set_appearance_mode("system")
         ctk.set_default_color_theme("blue")
         
+        self.calibration = None
+        self.directory = None
+        self.running = False  # Flag to control the running state of the MOKE code
 
         self.app = ctk.CTk()
         self.app.geometry("750x475")
@@ -52,9 +56,6 @@ class MOKEGUI:
         self.label_step = ctk.CTkLabel(master=frame, text="Step Voltage (V)")
         self.label_step.grid(row=2, column=0, padx=10, pady=5)
 
-        self.stop_event = threading.Event()  # Initialize the stop event
-        self.thread = None  # Initialize the thread
-
         self.app.mainloop()
         
         
@@ -77,12 +78,11 @@ class MOKEGUI:
         current = self.start_button.cget("text")
         if current == "Start":
             self.start_button.configure(text="Stop")
-            self.stop_event.clear()  # Clear the stop event
-            self.thread = threading.Thread(target=self.moke_code)  # Create a new thread to run moke_code
-            self.thread.start()  # Start the thread
+            self.running = True
+            threading.Thread(target=self.moke_code).start()
         else:
             self.start_button.configure(text="Start")
-            self.stop_event.set()  # Set the stop event to signal the thread to stop
+            self.running = False
 
     def moke_code(self):
         rm = visa.ResourceManager()  #calls the differnt addresses for what is attached to the system
@@ -92,8 +92,7 @@ class MOKEGUI:
 
         dmm_01 = rm.open_resource('GPIB0::22::INSTR')
         smu = rm.open_resource('GPIB0::24::INSTR')  #adress and connection for the source meter
-
-
+        
         def init_smu():
             smu.write('*RST')
             smu.write(':SOUR:FUNC CURR')
@@ -104,17 +103,13 @@ class MOKEGUI:
             smu.write(':SENS:FUNC "VOLT"')
             smu.write(':SENS:VOLT:RANG 2')
             smu.write(':FORM:ELEM VOLT')
-            smu.write(':OUTP ON'
+            smu.write(':OUTP ON')
 
 
         init_smu()
 
-        # print(float(dmm_01.query(":MEAS:VOLT?").split(',')[0]))
-
-        #This is where we want to save our data and graphs to. 
-        #save_dir = os.path.join('C:/Users/ramosaponte/Box/Arena_Lab_Data/Leo/MOKE') #File path to save FMR data to.20210816A_Fe90Co10
         save_dir = self.directory
-        sample_name = self.sample_name.get()
+        sample_name = self.sample_name.get("1.0", "end-1c")
 
         calibrationfile = self.calibration
 
@@ -133,27 +128,15 @@ class MOKEGUI:
 
         print('Calibration Fit, Field (T) = ', slope, '* Hall_voltage +', intercept)
 
-        # results =pd.DataFrame()
-
-        #this is the voltage output given to the BOP to convert into a current to give to the magnet 
-        #negative voltage is positive current
-
-        maxvolt = self.maxV.get()
-        voltstep = self.stepV.get()
+        maxvolt = float(self.maxV.get("1.0", "end-1c"))
+        voltstep = float(self.stepV.get("1.0", "end-1c"))
 
         loads = np.arange(0.0, maxvolt, voltstep)
         loads2 = np.arange(-1 * maxvolt, maxvolt, voltstep)
         loads3 = np.arange(maxvolt, -1 * maxvolt, -1 * voltstep)
 
-        # print (loads)
-        # print(loads2)
-        # print(loads3)
-
-        #combines the two data sets to create a full hystersis loop
-
         loadtotal = np.concatenate([loads3, loads2])
-
-
+    
         def file_date():
             import datetime
             date_today_0 = datetime.datetime.today()
@@ -172,8 +155,9 @@ class MOKEGUI:
         #time.sleep(3)
         lia.write('AUXV 1, 10.0')  #saturate the magnet
         time.sleep(1)
+
         for load in loadtotal:
-            if self.stop_event.is_set():  # Check if the stop event is set
+            if not self.running:
                 break
             lia.write('AUXV 1 ,%.2f' % load)
             Hall_voltage = dmm_01.query(":MEAS:VOLT?")
@@ -183,4 +167,40 @@ class MOKEGUI:
             FMR_string = lia.query('SNAP? 1,2')  #this collects the data from X and Y from the LIA and returns it as a string
             #X = FMR signal, Y = background
             FMR_data = FMR_string.split(',')  #this splits the string up accordingly to get the values into an array
-            Hall_voltage = dmm_01.query(":MEAS
+            Hall_voltage = dmm_01.query(":MEAS:VOLT?")
+            Field_value = (slope * float(Hall_voltage.split(',')[0]) + intercept)
+            print(Field_value)
+            temp = {"Voltage (V)": load,
+                    "MOKE Signal": float(FMR_data[0]),
+                    'MOKE BCKGD': float(FMR_data[1]),
+                    'Hall Voltage(V)': float(Hall_voltage.split(',')[0]),
+                    'Field (T)': Field_value}  #Creating a temporary array to store all of our values to before appending to dataframe.
+            results = results.append(temp,
+                                     #We build the results dataframe row by row by adding the temp array for every for loop/voltage
+                                     ignore_index=True)  #Resets indexing so rows appear in the order appended/added.
+
+            #Plot current data
+            plt.show(
+                block=False)  #If running in terminal, block = False will let the code keep running w/o closing the graph window
+            plt.xlabel('Field (T)')
+            plt.ylabel('Moke signal')
+            plt.title(sample_name)
+            plt.plot(results['Field (T)'],
+                     results['MOKE Signal'], '-b',
+                     label='MOKE Signal')  #Setup what data is to be plotted. If you want lines instead of scatter omit 'o'.
+            plt.grid('on')
+            plt.tight_layout()
+            clear_output(
+                wait=True)  #Clears any previous plot so that the data plotted is updated every loop and not appended to previous
+
+            display(plt.gcf())
+            time.sleep(1.0)
+
+        lia.write('AUXV 1 ,%.2f' % 0.0)
+
+        file_date_today = file_date()
+        results.to_csv(str(save_dir) + '/' + str(sample_name) + '_' + str(file_date_today) + '_results.csv', index=False)
+        print("results saved to %s" % save_dir)
+        print('Program Completed')
+        self.running = False
+        self.start_button.configure(text="Start")
