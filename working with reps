@@ -10,7 +10,6 @@ from IPython.display import clear_output
 from IPython.display import display
 from sklearn.linear_model import LinearRegression
 import threading
-import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 class MOKEGUI:
@@ -24,7 +23,7 @@ class MOKEGUI:
         self.running = False  # Flag to control the running state of the MOKE code
         
         self.app = ctk.CTk()
-        self.app.geometry("870x535")
+        self.app.geometry("1000x700")
         self.app.title("MOKE")
 
         frame = ctk.CTkFrame(master=self.app)
@@ -249,6 +248,7 @@ class MOKEGUI:
                 #results=results.append(temp,ignore_index=True)
 
                 #Plot current data
+                self.ax.cla()
                 self.ax.plot(results["Field (T)"], results["MOKE Signal"], "-b", label="Moke Signal")
                 self.ax.set_xlabel("Field(T)")
                 self.ax.set_ylabel("Moke Signal")
