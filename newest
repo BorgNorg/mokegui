@@ -239,6 +239,8 @@ class MOKEGUI:
             # start of MOKE data collection
             ################################################################################################################
             for n in np.arange(0.0, 6.0):
+                if self.running.wait(0):
+                    break
                 results = pd.DataFrame()  # creates empty data frame to save data to
                 temps = pd.DataFrame()
                 lia.write('AUXV 1, 9.0')
@@ -301,5 +303,4 @@ class MOKEGUI:
             self.start_button.configure(text="Start")
 
 
-MOKEGUI()
 MOKEGUI()
