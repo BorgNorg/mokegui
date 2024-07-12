@@ -1,3 +1,8 @@
+Traceback (most recent call last):
+  File "C:\Users\ayomipo\AppData\Local\anaconda3\Lib\tkinter\__init__.py", line 4083, in __del__
+    self.tk.call('image', 'delete', self.name)
+RuntimeError: main thread is not in main loop
+
 import customtkinter as ctk
 from tkinter import filedialog
 import pyvisa as visa
