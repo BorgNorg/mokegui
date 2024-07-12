@@ -1,8 +1,3 @@
-Traceback (most recent call last):
-  File "C:\Users\ayomipo\AppData\Local\anaconda3\Lib\tkinter\__init__.py", line 4083, in __del__
-    self.tk.call('image', 'delete', self.name)
-RuntimeError: main thread is not in main loop
-
 import customtkinter as ctk
 from tkinter import filedialog
 import pyvisa as visa
@@ -23,7 +18,7 @@ class MOKEGUI:
 
         self.calibration = None
         self.directory = None
-        self.running = False
+        self.running = threading.Event()
 
         self.app = ctk.CTk()
         self.app.geometry("1200x810")
@@ -74,7 +69,7 @@ class MOKEGUI:
         self.app.mainloop()
 
     def closing_window(self):
-        self.running = False
+        self.running.set()
         self.app.quit()
         self.app.destroy()
 
@@ -118,14 +113,18 @@ class MOKEGUI:
         current = self.start_button.cget("text")
         if current == "Start":
             self.start_button.configure(text="Stop")
-            self.running = True
+            self.running.clear()
+            self.ax.cla()
+            self.ax.set_xlabel("Field(T)")
+            self.ax.set_ylabel("Moke Signal")
+            self.ax.grid("on")
+            self.plot_canvas.draw() 
             threading.Thread(target=self.moke_code).start()
         else:
             self.start_button.configure(text="Start")
-            self.running = False
+            self.running.set()
 
     def moke_code(self):
-        while not self.running.is_set():
             rm = visa.ResourceManager()  # calls the differnt addresses for what is attached to the system
             sm = rm.open_resource('GPIB0::24::INSTR')  # adress and connection for the source meter
             # rm.list_resources()
@@ -196,7 +195,7 @@ class MOKEGUI:
             time.sleep(1)
     
             for load in loadtotal:
-                if not self.running:
+                if self.running.wait(0):
                     break
                 lia.write('AUXV 1 ,%.2f' % load)
                 Hall_voltage = dmm_01.query(":MEAS:VOLT?")
@@ -240,8 +239,6 @@ class MOKEGUI:
             # start of MOKE data collection
             ################################################################################################################
             for n in np.arange(0.0, 6.0):
-                if not self.running:
-                    break
                 results = pd.DataFrame()  # creates empty data frame to save data to
                 temps = pd.DataFrame()
                 lia.write('AUXV 1, 9.0')
@@ -251,6 +248,8 @@ class MOKEGUI:
                 lia.write('AUXV 1, 9.0')  # saturate the magnet
                 time.sleep(1)
                 for load in loadtotal:
+                    if self.running.wait(0):
+                        break
                     lia.write('AUXV 1 ,%.2f' % load)
                     Hall_voltage = dmm_01.query(":MEAS:VOLT?")
                     time.sleep(0.1)
@@ -298,8 +297,9 @@ class MOKEGUI:
     
             print("results saved to %s" % save_dir)
             print('Program Completed')
-            self.running = False
+            self.running.clear()
             self.start_button.configure(text="Start")
 
 
+MOKEGUI()
 MOKEGUI()
